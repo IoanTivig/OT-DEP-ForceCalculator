@@ -2,7 +2,7 @@ from src.funcs.cell_detection_funcs import *
 
 
 # Call the function with the folder path
-folder_path = "1data/images/sample 1"
+folder_path = "data/images/sample 1"
 efs_end_list, efs_start_list, ef_gradients_list, cell_to_target_list, cell_to_origin_list, radi_list, voltages_list = compute_voltage_ramping(folder_path)
 
 CM_factor = 0.8

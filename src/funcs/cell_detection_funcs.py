@@ -210,6 +210,11 @@ def calculate_DEP_force(cell_radius, buffer_permittivity, CM_factor, EF_gradient
 
     return DEP_force
 
+def mouse_callback(event, x, y, flags, param):
+    if event == cv2.EVENT_LBUTTONDOWN:
+        print(f"Mouse click at position: ({x}, {y})")
+        
+
 def compute_voltage_ramping(folder_path,
                             min_radius_microns=5,
                             max_radius_microns=20,
@@ -258,7 +263,9 @@ def compute_voltage_ramping(folder_path,
         cell_population_details, labeled_image = detect_cell_of_interest(image, min_radius_pixels, max_radius_pixels)
 
         # Display the image with the detected cell
-        cv2.imshow('Labeled Image', labeled_image)
+        cv2.namedWindow('Resizable Window', cv2.WINDOW_NORMAL)
+        cv2.setMouseCallback('Resizable Window', mouse_callback)
+        cv2.imshow('Resizable Window', labeled_image)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
