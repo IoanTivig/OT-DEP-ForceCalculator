@@ -163,7 +163,7 @@ origin_coords_pixels = (int(origin_coords_microns[0] / microns_per_pixel),
                         int(origin_coords_microns[1] / microns_per_pixel))
 
 # Example usage
-image_path = '../data/images/DEP-OT test sample 1 - origin.tif'
+image_path = 'DEP-OT test sample 1 - origin.tif'
 image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 cell_coords, cell_radi, labeled_image, num_cells = detect_cells(image=image,
                                                      min_radius_pixels=min_radius_pixels,
