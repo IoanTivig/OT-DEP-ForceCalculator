@@ -20,6 +20,25 @@ def calculate_rsquare(y, y_fit):
     r_square = 1 - (ss_res / ss_tot)
     return r_square
 
+def plot_stiffness(path, cell_to_origin_list, DEP_forces_list, DEP_forces_fit_list, k, r_square):
+    # Create a figure with 2 subplots (1 row, 2 columns)
+    fig = plt.figure(figsize=(8, 6))
+
+    # Scatter plot 1
+    plt.scatter(cell_to_origin_list, DEP_forces_list, label="ΔX (µm) vs Force (pN)")
+    plt.plot(cell_to_origin_list, DEP_forces_fit_list, label="Fit line", color='red')
+    plt.title('Force (pN) vs ΔX (µm)', fontsize=22)
+    plt.xlabel("ΔX (µm)", fontsize=14)
+    plt.ylabel('Force (pN)', fontsize=14)
+
+    plt.figtext(0.15, 0.8, f"Stiffness (k): {k:.2f} pN/μm, \nRsquared: {r_square:.2f}",
+                fontsize=16,
+                color='black')
+
+    # Save the image
+    file_path = os.path.join(path, "results.png")
+    plt.savefig(file_path)
+
 def plot_data(path, time_list, ef_gradients_list, DEP_forces_list, DEP_forces_fit_list, cell_to_origin_list, voltages_list):
     # Create a figure with 2 subplots (1 row, 2 columns)
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 10))
@@ -559,7 +578,8 @@ def compute_voltage_ramping_from_ui(folder_path,
     print(f"Stiffness (k): {k} pN/μm, Rsquared: {r_square}")
 
     # Plot the data
-    plot_data(data_folder, time_list, ef_gradients_list, DEP_forces_list, DEP_forces_fit_list, cell_to_origin_list, voltages_list)
+    #plot_data(data_folder, time_list, ef_gradients_list, DEP_forces_list, DEP_forces_fit_list, cell_to_origin_list, voltages_list)
+    plot_stiffness(data_folder, cell_to_origin_list, DEP_forces_list, DEP_forces_fit_list, k, r_square)
 
     # Calculate the average and stdev of radius of particle
     avg_particle_radius = np.mean(radi_list)
