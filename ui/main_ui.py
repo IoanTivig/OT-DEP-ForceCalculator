@@ -1,8 +1,9 @@
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QMainWindow, QFileDialog
+from PyQt5.QtWidgets import QMainWindow, QFileDialog, QTableWidgetItem
 from PyQt5.uic import loadUi
 
 from src.funcs.cell_detection_funcs import *
+from src.funcs.other import *
 from ui.resources.graphical_resources import *
 
 '''
@@ -49,7 +50,8 @@ class MainUI(QMainWindow):
         self.pyqt5_button_select_target.clicked.connect(self.select_target)
         self.pyqt5_button_select_cell.clicked.connect(self.select_cell)
         self.pyqt5_button_refresh_parameters.clicked.connect(self.load_cv2_image)
-        self.pyqt5_button_start_processing.clicked.connect(self.process_folder)
+        self.pyqt5_button_compute_stiffness.clicked.connect(self.process_folder_stiffness)
+        self.pyqt5_button_compute_spectra.clicked.connect(self.process_folder_frequency)
 
     def open_path(self):
         folder_path = QFileDialog.getExistingDirectory(self, "Select Folder")
@@ -154,7 +156,7 @@ class MainUI(QMainWindow):
             cv2.setMouseCallback('Cell Detection Window', self.mouse_callback)
             cv2.imshow('Cell Detection Window', self.labeled_image)
 
-    def process_folder(self):
+    def process_folder_stiffness(self):
         compute_voltage_ramping_from_ui(
             folder_path=self.pyqt5_entry_folderpath.text(),
             min_radius_microns=float(self.pyqt5_entry_particlesize_min.text()),
@@ -172,6 +174,20 @@ class MainUI(QMainWindow):
             cell_radius_threshold=float(self.pyqt5_entry_escaping_thereshold.text()),
             cm_factor=float(self.pyqt5_entry_cm_factor.text()),
             buffer_permittivity=float(self.pyqt5_entry_buffer_perm.text()),
+        )
+
+    def process_folder_frequency(self):
+        compute_frequency_ramping_from_ui(
+            folder_path=self.pyqt5_entry_folderpath.text(),
+            min_radius_microns=float(self.pyqt5_entry_particlesize_min.text()),
+            max_radius_microns=float(self.pyqt5_entry_particlesize_max.text()),
+            param1=int(self.pyqt5_entry_param1.text()),
+            param2=int(self.pyqt5_entry_param2.text()),
+            target_coords_pixels=self.target_coordinates,
+            origin_coords_pixels=self.origin_coordinates,
+            roi_size_microns=(int(self.pyqt5_entry_roisize_w.text()), int(self.pyqt5_entry_roisize_h.text())),
+            microns_per_pixel=0.1923,
+            voltage=float(self.pyqt5_entry_dep_vpp.text()),
         )
 
     def closeEvent(self, event):

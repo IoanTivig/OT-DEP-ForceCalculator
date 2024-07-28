@@ -93,6 +93,22 @@ def draw_parameters_to_image(image, radius, cell_to_target_distance, cell_to_ori
     return image
 
 
+def draw_dep_parameters_to_image(image, frequency, radius, cell_to_target_distance, displacement, ef_gradient, relative_dep,):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    color = (255, 255, 255)
+    thickness = 2
+
+    cv2.putText(image, f"Frequency: {frequency:.2f} Hz", (10, 30), font, 0.75, color, thickness)
+    cv2.putText(image, f"Cell radius: {radius:.2f} micrometers", (10, 60), font, 0.75, color, thickness)
+    cv2.putText(image, f"Distance from cell to target: {cell_to_target_distance:.2f} micrometers", (10, 90), font, 0.75, color,
+                thickness)
+    cv2.putText(image, f"Displacement: {displacement:.2f} micrometers", (10, 120), font, 0.75, color,
+                thickness)
+    cv2.putText(image, f"EF gradient: {ef_gradient:.2f} V^3/m^2", (10, 150), font, 0.75, color, thickness)
+    cv2.putText(image, f"Relative DEP force: {relative_dep:.2f}", (10, 180), font, 0.75, color, thickness)
+
+    return image
+
 def draw_highlight_rectangle(image, top_left, bottom_right, color, transparency=0.5):
     # Create an overlay image
     overlay = image.copy()
@@ -306,140 +322,6 @@ def mouse_callback(event, x, y, flags, param):
     if event == cv2.EVENT_LBUTTONDOWN:
         print(f"Mouse click at position: ({x}, {y})")
 
-
-def compute_voltage_ramping(folder_path,
-                            min_radius_microns=5,
-                            max_radius_microns=20,
-                            target_coords_microns=(166, 143),
-                            roi_size_microns=(50, 50),
-                            microns_per_pixel=0.1923,
-                            voltage_ramp=0.25,
-                            frames_per_voltage=4,
-                            start_voltage=0.5
-                            ):
-    # Initialize the lists for cell parameters per image
-    efs_end_list = []
-    efs_start_list = []
-    ef_gradients_list = []
-    cell_to_target_list = []
-    cell_to_origin_list = []
-    radi_list = []
-    voltages_list = []
-
-    # Create processed images folder
-    processed_folder = os.path.join(folder_path, "_processed")
-    if not os.path.exists(processed_folder):
-        os.makedirs(processed_folder)
-
-    # Convert parameters from microns to pixels
-    min_radius_pixels = int(min_radius_microns / microns_per_pixel)
-    max_radius_pixels = int(max_radius_microns / microns_per_pixel)
-    target_coords_pixels = (int(target_coords_microns[0] / microns_per_pixel),
-                            int(target_coords_microns[1] / microns_per_pixel))
-    roi_size_pixels = (int(roi_size_microns[0] / microns_per_pixel),
-                       int(roi_size_microns[1] / microns_per_pixel))
-
-    # Load the first image, check if it is a valid image file and get the path, if no image is found raise an error
-    image_path = None
-    for file in os.listdir(folder_path):
-        if file.endswith(".tif") or file.endswith(".png") or file.endswith(".jpg"):
-            image_path = os.path.join(folder_path, file)
-            break
-    if image_path is None:
-        raise FileNotFoundError(f"No image found in folder: {folder_path}")
-
-    else:
-        # Load the first image as grayscale and detect the cell of interest
-        image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-        cell_population_details, labeled_image = detect_cell_of_interest(image, min_radius_pixels, max_radius_pixels)
-
-        # Display the image with the detected cell
-        cv2.namedWindow('Resizable Window', cv2.WINDOW_NORMAL)
-        cv2.setMouseCallback('Resizable Window', mouse_callback)
-        cv2.imshow('Resizable Window', labeled_image)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-        # Ask the user to input the cell number to track
-        cell_no = input("Enter the cell number to track: ")
-        cell_no = int(cell_no)
-
-        # Define the region of interest (ROI) for the cell tracking
-        x = cell_population_details[cell_no - 1][1][0] - roi_size_pixels[0] // 2
-        y = cell_population_details[cell_no - 1][1][1] - roi_size_pixels[1] // 2
-        w = roi_size_pixels[0]
-        h = roi_size_pixels[1]
-
-        # Define the origin coordinates in pixels
-        origin_coords_pixels = (cell_population_details[cell_no - 1][1][0], cell_population_details[cell_no - 1][1][1])
-
-        iter_no = 0
-        # Loop through the images in the folder
-        for file in os.listdir(folder_path):
-            if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
-                continue
-            # Load the iterated image
-            image_path_iter = os.path.join(folder_path, file)
-            image_iter = cv2.imread(image_path_iter, cv2.IMREAD_GRAYSCALE)
-
-            # Get the coordinates and radius of the detected cell in the ROI
-            roi = (x, y, w, h)
-            cell_coords, radius, image_iter, success = detect_cells_in_roi(image_iter, min_radius_pixels,
-                                                                           max_radius_pixels, roi)
-            if not success:
-                continue
-
-            # Calculate the distance from the origin to the cell position and radius
-            origin_to_cell, cell_to_target, target_to_cell_end, target_to_cell_start = calculate_distances(cell_coords,
-                                                                                                           origin_coords_pixels,
-                                                                                                           target_coords_pixels,
-                                                                                                           radius)
-
-            # if cell distance is longer than 1.5 times the diameter of the cell, break the loop
-            if origin_to_cell > 2 * radius:
-                break
-
-            # Calculate the voltage for the current image
-            voltage = start_voltage + (iter_no // frames_per_voltage) * voltage_ramp
-            iter_no += 1
-
-            # Calculate the electric field (EF) gradient
-            ef_gradient, ef_start, ef_end = calculate_EF_gradient(target_to_cell_start * microns_per_pixel,
-                                                                  target_to_cell_end * microns_per_pixel, voltage)
-
-            # Display the ROI with the detected cell
-            roi_image = draw_highlight_rectangle(image_iter, (x, y), (x + w, y + h), (255, 255, 255), transparency=0.1)
-            roi_image = draw_highlight_circle(roi_image, cell_coords, radius, (255, 255, 255), transparency=0.25)
-
-            # Draw the initial position of cell
-            roi_image = draw_highlight_circle(roi_image, origin_coords_pixels, 3, (255, 255, 255), transparency=0.25)
-
-            # Draw the target position
-            roi_image = draw_highlight_circle(roi_image, target_coords_pixels, 3, (255, 255, 255), transparency=0.25)
-
-            # Draw the parameters on the image
-            image_iter = draw_parameters_to_image(roi_image, radius * microns_per_pixel,
-                                                  cell_to_target * microns_per_pixel,
-                                                  origin_to_cell * microns_per_pixel, ef_gradient, ef_start, ef_end)
-
-            # Save image as processed with a text added before suffix -processed
-            processed_image_path = os.path.join(processed_folder, file.replace(".", "-processed."))
-            cv2.imwrite(processed_image_path, image_iter)
-
-            # Append the calculated parameters to the lists
-            efs_end_list.append(ef_end)
-            efs_start_list.append(ef_start)
-            ef_gradients_list.append(ef_gradient)
-            cell_to_target_list.append(cell_to_target * microns_per_pixel)
-            cell_to_origin_list.append(origin_to_cell * microns_per_pixel)
-            radi_list.append(radius * microns_per_pixel)
-            voltages_list.append(voltage)
-
-            print(f"Image: {file}")
-
-    return efs_end_list, efs_start_list, ef_gradients_list, cell_to_target_list, cell_to_origin_list, radi_list, voltages_list
-
-
 def compute_voltage_ramping_from_ui(folder_path,
                                     min_radius_microns=5,
                                     max_radius_microns=20,
@@ -492,6 +374,27 @@ def compute_voltage_ramping_from_ui(folder_path,
     h = roi_size_pixels[1]
 
     iter_no = 0
+    # Get the average size of the cell from all the images
+    internal_radi = []
+    for file in os.listdir(folder_path):
+        if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
+            continue
+        # Load the iterated image
+        image_path_iter = os.path.join(folder_path, file)
+        image_iter = cv2.imread(image_path_iter, cv2.IMREAD_GRAYSCALE)
+
+        # Get the coordinates and radius of the detected cell in the ROI
+        roi = (x, y, w, h)
+        cell_coords, radius, image_iter, success = detect_cells_in_roi(image_iter,
+                                                                       min_radius_pixels,
+                                                                       max_radius_pixels,
+                                                                       roi)
+        if not success:
+            continue
+
+        internal_radi.append(radius)
+    avg_internal_radius = int(np.mean(internal_radi))
+
     # Loop through the images in the folder
     for file in os.listdir(folder_path):
         if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
@@ -513,7 +416,7 @@ def compute_voltage_ramping_from_ui(folder_path,
         origin_to_cell, cell_to_target, target_to_cell_end, target_to_cell_start = calculate_distances(cell_coords,
                                                                                                        origin_coords_pixels,
                                                                                                        target_coords_pixels,
-                                                                                                       radius)
+                                                                                                       avg_internal_radius)
 
         # if cell distance is longer than set times the diameter of the cell, break the loop
         if origin_to_cell > cell_radius_threshold * radius:
@@ -608,3 +511,180 @@ def compute_voltage_ramping_from_ui(folder_path,
             file.write(f"{time_list[i]}, {voltages_list[i]}, {ef_gradients_list[i]}, {DEP_forces_list[i]}, {cell_to_origin_list[i]}\n")
 
     return DEP_forces_list, efs_end_list, efs_start_list, ef_gradients_list, voltages_list, cell_to_target_list, cell_to_origin_list, time_list
+
+
+def compute_frequency_ramping_from_ui(folder_path,
+                                    min_radius_microns=5,
+                                    max_radius_microns=20,
+                                    param1=60,
+                                    param2=30,
+                                    target_coords_pixels=(0, 0),
+                                    origin_coords_pixels=(0, 0),
+                                    roi_size_microns=(50, 50),
+                                    microns_per_pixel=0.1923,
+                                    voltage=0.5,
+                                    ):
+
+    # Initialize the lists for cell parameters per image
+    efs_end_list = []
+    efs_start_list = []
+    ef_gradients_list = []
+    cell_to_target_list = []
+    cell_to_origin_list = []
+    offset_list = []
+    radi_list = []
+    frequencies_list = []
+    relative_DEP_forces = []
+
+    # Create processed images folder
+    processed_folder = os.path.join(folder_path, "_processed")
+    if not os.path.exists(processed_folder):
+        os.makedirs(processed_folder)
+
+    data_folder = os.path.join(folder_path, "_data")
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
+
+    # Convert parameters from microns to pixels
+    min_radius_pixels = int(min_radius_microns / microns_per_pixel)
+    max_radius_pixels = int(max_radius_microns / microns_per_pixel)
+    roi_size_pixels = (int(roi_size_microns[0] / microns_per_pixel),
+                       int(roi_size_microns[1] / microns_per_pixel))
+
+    # Define the region of interest (ROI) for the cell tracking
+    x = origin_coords_pixels[0] - roi_size_pixels[0] // 2
+    y = origin_coords_pixels[1] - roi_size_pixels[1] // 2
+    w = roi_size_pixels[0]
+    h = roi_size_pixels[1]
+
+    # Get the average size of the cell from all the images, and make the curated list of files
+    internal_radi = []
+    files = []
+    for file in os.listdir(folder_path):
+        if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
+            continue
+        if file.startswith("_"):
+            continue
+
+        # Load the iterated image
+        image_path_iter = os.path.join(folder_path, file)
+        image_iter = cv2.imread(image_path_iter, cv2.IMREAD_GRAYSCALE)
+
+        # Get the coordinates and radius of the detected cell in the ROI
+        roi = (x, y, w, h)
+        cell_coords, radius, image_iter, success = detect_cells_in_roi(image_iter,
+                                                                       min_radius_pixels,
+                                                                       max_radius_pixels,
+                                                                       roi)
+        if not success:
+            continue
+
+        internal_radi.append(radius)
+        files.append(file)
+
+    avg_internal_radius = int(np.mean(internal_radi))
+    files = sorted(files, key=lambda x: int(x.split("_")[1].split("Hz")[0]))
+
+    for file in files:
+        # Load the iterated image
+        image_path_iter = os.path.join(folder_path, file)
+        image_iter = cv2.imread(image_path_iter, cv2.IMREAD_GRAYSCALE)
+
+        # Get the coordinates and radius of the detected cell in the ROI
+        roi = (x, y, w, h)
+        cell_coords, radius, image_iter, success = detect_cells_in_roi(image_iter,
+                                                                       min_radius_pixels,
+                                                                       max_radius_pixels,
+                                                                       roi)
+        if not success:
+            continue
+
+        # Get the frequency from the file name. Example name: OpenDEP_10000000Hz.jpg and i want the 10000000
+        frequency = int(file.split("_")[1].split("Hz")[0])
+        frequencies_list.append(frequency)
+
+        # Calculate the distance from the origin to the cell position and radius
+        origin_to_cell, cell_to_target, target_to_cell_end, target_to_cell_start = calculate_distances(cell_coords,
+                                                                                                       origin_coords_pixels,
+                                                                                                       target_coords_pixels,
+                                                                                                       avg_internal_radius)
+
+        # Calculate offset
+        baseline_distance_to_target = np.sqrt((target_coords_pixels[0] - origin_coords_pixels[0]) ** 2 + (target_coords_pixels[1] - origin_coords_pixels[1]) ** 2)
+        offset = baseline_distance_to_target - cell_to_target
+
+        # Calculate the electric field (EF) gradient
+        ef_gradient, ef_start, ef_end = calculate_EF_gradient(target_to_cell_start * microns_per_pixel,
+                                                              target_to_cell_end * microns_per_pixel, voltage)
+
+        # Append the calculated parameters to the lists
+        efs_end_list.append(ef_end)
+        efs_start_list.append(ef_start)
+        ef_gradients_list.append(ef_gradient)
+        cell_to_target_list.append(cell_to_target * microns_per_pixel)
+        cell_to_origin_list.append(origin_to_cell * microns_per_pixel)
+        offset_list.append(offset * microns_per_pixel)
+        radi_list.append(radius * microns_per_pixel)
+
+        # Calculate relative DEP forces by correcting offset with the gradient (need to have the first image as reference)
+        relative_DEP_force = (offset * microns_per_pixel / ef_gradient) / (offset_list[0] / ef_gradients_list[0])
+        print(f"Relative DEP force: {relative_DEP_force}")
+        relative_DEP_forces.append(relative_DEP_force)
+
+        # Image formating
+        # Display the ROI with the detected cell
+        roi_image = draw_highlight_rectangle(image_iter, (x, y), (x + w, y + h), (255, 255, 255), transparency=0.1)
+        roi_image = draw_highlight_circle(roi_image, cell_coords, radius, (255, 255, 255), transparency=0.25)
+
+        # Draw the initial position of cell
+        roi_image = draw_highlight_circle(roi_image, origin_coords_pixels, 3, (255, 255, 255), transparency=0.25)
+
+        # Draw the target position
+        roi_image = draw_highlight_circle(roi_image, target_coords_pixels, 3, (255, 255, 255), transparency=0.25)
+
+        # Draw the parameters on the image
+        image_iter = draw_dep_parameters_to_image(image=roi_image,
+                                                  frequency=frequency,
+                                                  radius=radius * microns_per_pixel,
+                                                  cell_to_target_distance=cell_to_target * microns_per_pixel,
+                                                  displacement=offset * microns_per_pixel,
+                                                  ef_gradient=ef_gradient,
+                                                  relative_dep=relative_DEP_force)
+
+        # Save image as processed with a text added before suffix -processed
+        processed_image_path = os.path.join(processed_folder, file.replace(".", "-processed."))
+        cv2.imwrite(processed_image_path, image_iter)
+
+        print(f"Image: {file}")
+
+    # Rearange the lists to be in ascending order of frequency
+    (frequencies_list,
+     ef_gradients_list,
+     cell_to_target_list,
+     cell_to_origin_list,
+     offset_list) = zip(*sorted(zip(
+        frequencies_list,
+        ef_gradients_list,
+        cell_to_target_list,
+        cell_to_origin_list,
+        offset_list)))
+
+    # Calculate the average and stdev of radius of particle
+    avg_particle_radius = np.mean(radi_list)
+    stdev_particle_radius = np.std(radi_list)
+
+    # Save the results to a csv file
+    results_file = os.path.join(data_folder, "results.csv")
+    if os.path.exists(results_file):
+        os.remove(results_file)
+
+    with open(results_file, "w") as file:
+
+        file.write(f"Average particle radius (µm), {avg_particle_radius}, {stdev_particle_radius}\n")
+        file.write("\n\n")
+
+        file.write("Frequency (Hz), EF gradient (V^2/m^3), Offset (µm), Relateive DEP Force\n")
+        for i in range(len(frequencies_list)):
+            file.write(f"{frequencies_list[i]}, {ef_gradients_list[i]}, {offset_list[i]}, {relative_DEP_forces[i]}\n")
+
+    return frequencies_list, ef_gradients_list, cell_to_target_list, cell_to_origin_list, offset_list, relative_DEP_forces
