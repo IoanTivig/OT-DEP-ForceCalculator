@@ -1,9 +1,9 @@
 import cv2
 import numpy as np
 
-# First, we need to detect the cell of intrest which will remain the same thorugh all the rest of the images
+# First, we need to detect the cell of intrest which will remain the same thorugh all the rest of the OpenDEP ot-force
 # We will need to detect the cells and select the one that is of interest
-# After selection a ROI will be selected and the cell will be tracked thorugh the rest of the images
+# After selection a ROI will be selected and the cell will be tracked thorugh the rest of the OpenDEP ot-force
 # At each tracking step we will need to get the cell coordinates and the cell size, distance from the EF origin (tip of electrode),
 # from the previous image and from the initial image, where we selected the cell in its stable position
 

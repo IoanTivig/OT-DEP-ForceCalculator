@@ -4,9 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
-# First, we need to detect the cell of intrest which will remain the same thorugh all the rest of the images
+# First, we need to detect the cell of intrest which will remain the same thorugh all the rest of the OpenDEP ot-force
 # We will need to detect the cells and select the one that is of interest
-# After selection a ROI will be selected and the cell will be tracked thorugh the rest of the images
+# After selection a ROI will be selected and the cell will be tracked thorugh the rest of the OpenDEP ot-force
 # At each tracking step we will need to get the cell coordinates and the cell size,
 # distance from the EF origin (tip of electrode), from the previous image and from the initial image,
 # where we selected the cell in its stable position
@@ -160,8 +160,9 @@ def check_cell_at_location(cell_population_details, location_coords):
 
     return cell_id, x_coord, y_coord, radius
 
+
 # This is the initial detection of the cell of interest
-def detect_cell_of_interest(image, min_radius_pixels, max_radius_pixels, param1=60, param2=30):
+def detect_cell_of_interest(image, distance_particles_pixels, min_radius_pixels, max_radius_pixels, param1=60, param2=30):
     # Some initial graphical parameters
     color = 255, 255, 255
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -177,7 +178,7 @@ def detect_cell_of_interest(image, min_radius_pixels, max_radius_pixels, param1=
     blurred = cv2.GaussianBlur(image, (5, 5), 0)
 
     # Use HoughCircles to detect circles in the image
-    circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, dp=1.2, minDist=min_radius_pixels,
+    circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, dp=1.2, minDist=distance_particles_pixels,
                                param1=param1, param2=param2, minRadius=min_radius_pixels, maxRadius=max_radius_pixels)
 
     # Initialize an empty list to store cell coordinates
@@ -209,7 +210,7 @@ def detect_cell_of_interest(image, min_radius_pixels, max_radius_pixels, param1=
     return cell_population_details, image
 
 
-def detect_cells_in_roi(image, min_radius_pixels, max_radius_pixels, roi):
+def detect_cells_in_roi(image, distance_particles_pixels, min_radius_pixels, max_radius_pixels, roi):
     # Load the image in grayscale
     success = True
 
@@ -221,7 +222,7 @@ def detect_cells_in_roi(image, min_radius_pixels, max_radius_pixels, roi):
     blurred_roi = cv2.GaussianBlur(roi_image, (9, 9), 2)
 
     # Use HoughCircles to detect circles in the ROI
-    circles = cv2.HoughCircles(blurred_roi, cv2.HOUGH_GRADIENT, dp=1.2, minDist=20,
+    circles = cv2.HoughCircles(blurred_roi, cv2.HOUGH_GRADIENT, dp=1.2, minDist=distance_particles_pixels,
                                param1=60, param2=30, minRadius=min_radius_pixels, maxRadius=max_radius_pixels)
 
     # Check if only one cell is detected
@@ -323,6 +324,7 @@ def mouse_callback(event, x, y, flags, param):
         print(f"Mouse click at position: ({x}, {y})")
 
 def compute_voltage_ramping_from_ui(folder_path,
+                                    distance_particles_microns=15,
                                     min_radius_microns=5,
                                     max_radius_microns=20,
                                     param1=60,
@@ -335,7 +337,8 @@ def compute_voltage_ramping_from_ui(folder_path,
                                     frames_per_voltage=4,
                                     frames_per_second=2,
                                     start_voltage=0.5,
-                                    cell_radius_threshold=2,
+                                    min_threshold=0.25,
+                                    max_threshold=2,
                                     cm_factor=1,
                                     buffer_permittivity=78
                                     ):
@@ -352,7 +355,7 @@ def compute_voltage_ramping_from_ui(folder_path,
     DEP_forces_fit_list = []
     time_list = []
 
-    # Create processed images folder
+    # Create processed OpenDEP ot-force folder
     processed_folder = os.path.join(folder_path, "_processed")
     if not os.path.exists(processed_folder):
         os.makedirs(processed_folder)
@@ -364,6 +367,7 @@ def compute_voltage_ramping_from_ui(folder_path,
     # Convert parameters from microns to pixels
     min_radius_pixels = int(min_radius_microns / microns_per_pixel)
     max_radius_pixels = int(max_radius_microns / microns_per_pixel)
+    distance_particles_pixels = int(distance_particles_microns / microns_per_pixel)
     roi_size_pixels = (int(roi_size_microns[0] / microns_per_pixel),
                        int(roi_size_microns[1] / microns_per_pixel))
 
@@ -374,7 +378,7 @@ def compute_voltage_ramping_from_ui(folder_path,
     h = roi_size_pixels[1]
 
     iter_no = 0
-    # Get the average size of the cell from all the images
+    # Get the average size of the cell from all the OpenDEP ot-force
     internal_radi = []
     for file in os.listdir(folder_path):
         if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
@@ -386,6 +390,7 @@ def compute_voltage_ramping_from_ui(folder_path,
         # Get the coordinates and radius of the detected cell in the ROI
         roi = (x, y, w, h)
         cell_coords, radius, image_iter, success = detect_cells_in_roi(image_iter,
+                                                                       distance_particles_pixels,
                                                                        min_radius_pixels,
                                                                        max_radius_pixels,
                                                                        roi)
@@ -395,7 +400,7 @@ def compute_voltage_ramping_from_ui(folder_path,
         internal_radi.append(radius)
     avg_internal_radius = int(np.mean(internal_radi))
 
-    # Loop through the images in the folder
+    # Loop through the OpenDEP ot-force in the folder
     for file in os.listdir(folder_path):
         if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
             continue
@@ -406,6 +411,7 @@ def compute_voltage_ramping_from_ui(folder_path,
         # Get the coordinates and radius of the detected cell in the ROI
         roi = (x, y, w, h)
         cell_coords, radius, image_iter, success = detect_cells_in_roi(image_iter,
+                                                                       distance_particles_pixels,
                                                                        min_radius_pixels,
                                                                        max_radius_pixels,
                                                                        roi)
@@ -417,9 +423,12 @@ def compute_voltage_ramping_from_ui(folder_path,
                                                                                                        origin_coords_pixels,
                                                                                                        target_coords_pixels,
                                                                                                        avg_internal_radius)
+        # If cell distance is shorter than set times the diameter of the cell, skip the image
+        if origin_to_cell < min_threshold * radius:
+            continue
 
         # if cell distance is longer than set times the diameter of the cell, break the loop
-        if origin_to_cell > cell_radius_threshold * radius:
+        if origin_to_cell > max_threshold * radius:
             break
 
         # Calculate the voltage for the current image
@@ -514,6 +523,7 @@ def compute_voltage_ramping_from_ui(folder_path,
 
 
 def compute_frequency_ramping_from_ui(folder_path,
+                                    distance_particles_microns=15,
                                     min_radius_microns=5,
                                     max_radius_microns=20,
                                     param1=60,
@@ -536,7 +546,7 @@ def compute_frequency_ramping_from_ui(folder_path,
     frequencies_list = []
     relative_DEP_forces = []
 
-    # Create processed images folder
+    # Create processed OpenDEP ot-force folder
     processed_folder = os.path.join(folder_path, "_processed")
     if not os.path.exists(processed_folder):
         os.makedirs(processed_folder)
@@ -548,6 +558,7 @@ def compute_frequency_ramping_from_ui(folder_path,
     # Convert parameters from microns to pixels
     min_radius_pixels = int(min_radius_microns / microns_per_pixel)
     max_radius_pixels = int(max_radius_microns / microns_per_pixel)
+    distance_particles_pixels = int(distance_particles_microns / microns_per_pixel)
     roi_size_pixels = (int(roi_size_microns[0] / microns_per_pixel),
                        int(roi_size_microns[1] / microns_per_pixel))
 
@@ -557,7 +568,7 @@ def compute_frequency_ramping_from_ui(folder_path,
     w = roi_size_pixels[0]
     h = roi_size_pixels[1]
 
-    # Get the average size of the cell from all the images, and make the curated list of files
+    # Get the average size of the cell from all the OpenDEP ot-force, and make the curated list of files
     internal_radi = []
     files = []
     for file in os.listdir(folder_path):
@@ -573,6 +584,7 @@ def compute_frequency_ramping_from_ui(folder_path,
         # Get the coordinates and radius of the detected cell in the ROI
         roi = (x, y, w, h)
         cell_coords, radius, image_iter, success = detect_cells_in_roi(image_iter,
+                                                                       distance_particles_pixels,
                                                                        min_radius_pixels,
                                                                        max_radius_pixels,
                                                                        roi)
@@ -593,6 +605,7 @@ def compute_frequency_ramping_from_ui(folder_path,
         # Get the coordinates and radius of the detected cell in the ROI
         roi = (x, y, w, h)
         cell_coords, radius, image_iter, success = detect_cells_in_roi(image_iter,
+                                                                       distance_particles_pixels,
                                                                        min_radius_pixels,
                                                                        max_radius_pixels,
                                                                        roi)

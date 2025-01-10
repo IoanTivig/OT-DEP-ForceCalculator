@@ -133,6 +133,7 @@ class MainUI(QMainWindow):
             # Convert the parameters to pixels
             min_radius_pixels = int(min_radius_microns / microns_per_pixel)
             max_radius_pixels = int(max_radius_microns / microns_per_pixel)
+            distance_particles_pixels = int(float(self.pyqt5_entry_mindistparticles.text()) / microns_per_pixel)
 
             # Load the first image as grayscale and detect the cell of interest
             image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
@@ -140,6 +141,7 @@ class MainUI(QMainWindow):
             param2 = int(self.pyqt5_entry_param2.text())
 
             self.cell_population_details, self.labeled_image_original = detect_cell_of_interest(image,
+                                                                                                distance_particles_pixels,
                                                                                                 min_radius_pixels,
                                                                                                 max_radius_pixels,
                                                                                                 param1=param1,
@@ -159,6 +161,7 @@ class MainUI(QMainWindow):
     def process_folder_stiffness(self):
         compute_voltage_ramping_from_ui(
             folder_path=self.pyqt5_entry_folderpath.text(),
+            distance_particles_microns=float(self.pyqt5_entry_mindistparticles.text()),
             min_radius_microns=float(self.pyqt5_entry_particlesize_min.text()),
             max_radius_microns=float(self.pyqt5_entry_particlesize_max.text()),
             param1=int(self.pyqt5_entry_param1.text()),
@@ -171,7 +174,8 @@ class MainUI(QMainWindow):
             frames_per_voltage=int(self.pyqt5_entry_frames_vpp_increment.text()),
             frames_per_second=int(self.pyqt5_entry_frames_per_second.text()),
             start_voltage=float(self.pyqt5_entry_vpp_start.text()),
-            cell_radius_threshold=float(self.pyqt5_entry_escaping_thereshold.text()),
+            min_threshold=float(self.pyqt5_entry_min_thereshold.text()),
+            max_threshold=float(self.pyqt5_entry_max_threshold.text()),
             cm_factor=float(self.pyqt5_entry_cm_factor.text()),
             buffer_permittivity=float(self.pyqt5_entry_buffer_perm.text()),
         )
@@ -179,6 +183,7 @@ class MainUI(QMainWindow):
     def process_folder_frequency(self):
         compute_frequency_ramping_from_ui(
             folder_path=self.pyqt5_entry_folderpath.text(),
+            distance_particles_microns=float(self.pyqt5_entry_mindistparticles.text()),
             min_radius_microns=float(self.pyqt5_entry_particlesize_min.text()),
             max_radius_microns=float(self.pyqt5_entry_particlesize_max.text()),
             param1=int(self.pyqt5_entry_param1.text()),
