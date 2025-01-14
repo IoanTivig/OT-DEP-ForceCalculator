@@ -46,16 +46,27 @@ class MainUI(QMainWindow):
 
         # Connect the buttons to the functions
         self.pyqt5_button_loadfolderpath.clicked.connect(self.open_path)
+        self.pyqt5_button_main_results_load.clicked.connect(self.open_main_results_path)
+        self.pyqt5_button_replace_results_load.clicked.connect(self.open_replace_results_path)
         self.pyqt5_button_loadloadimage.clicked.connect(self.load_cv2_image)
         self.pyqt5_button_select_target.clicked.connect(self.select_target)
         self.pyqt5_button_select_cell.clicked.connect(self.select_cell)
         self.pyqt5_button_refresh_parameters.clicked.connect(self.load_cv2_image)
         self.pyqt5_button_compute_stiffness.clicked.connect(self.process_folder_stiffness)
         self.pyqt5_button_compute_spectra.clicked.connect(self.process_folder_frequency)
+        self.pyqt5_button_combine_spectras.clicked.connect(self.combine_dep_results)
 
     def open_path(self):
         folder_path = QFileDialog.getExistingDirectory(self, "Select Folder")
         self.pyqt5_entry_folderpath.setText(folder_path)
+
+    def open_main_results_path(self):
+        file_path = QFileDialog.getOpenFileName(self, "Select File")
+        self.pyqt5_entry_main_results_path.setText(file_path[0])
+
+    def open_replace_results_path(self):
+        file_path = QFileDialog.getOpenFileName(self, "Select File")
+        self.pyqt5_entry_replace_results_path.setText(file_path[0])
 
     def select_target(self):
         self.target_selection = True
@@ -117,9 +128,10 @@ class MainUI(QMainWindow):
     def load_cv2_image(self):
         folder_path = self.pyqt5_entry_folderpath.text()
         for file in os.listdir(folder_path):
-            if file.endswith(".tif") or file.endswith(".png") or file.endswith(".jpg"):
-                image_path = os.path.join(folder_path, file)
-                break
+            if file.startswith("_baseline"):
+                if file.endswith(".tif") or file.endswith(".png") or file.endswith(".jpg"):
+                    image_path = os.path.join(folder_path, file)
+                    break
 
         if image_path is None:
             raise FileNotFoundError(f"No image found in folder: {folder_path}")
@@ -170,6 +182,9 @@ class MainUI(QMainWindow):
             origin_coords_pixels=self.origin_coordinates,
             roi_size_microns=(int(self.pyqt5_entry_roisize_w.text()), int(self.pyqt5_entry_roisize_h.text())),
             microns_per_pixel=float(self.pyqt5_entry_micronspixelration.text()),
+            ef_model=self.pyqt5_combo_ef_formula.currentIndex(),
+            distance_from_surface_source=self.pyqt5_combo_distfromsurfacesource.currentIndex(),
+            distance_from_surface_microns=float(self.pyqt5_entry_distfromsurface.text()),
             voltage_incr=float(self.pyqt5_entry_vpp_increment.text()),
             frames_per_voltage=int(self.pyqt5_entry_frames_vpp_increment.text()),
             frames_per_second=int(self.pyqt5_entry_frames_per_second.text()),
@@ -195,6 +210,15 @@ class MainUI(QMainWindow):
             voltage=float(self.pyqt5_entry_dep_vpp.text()),
         )
 
+    def combine_dep_results(self):
+        combine_dep_spectras(amplitude_one=float(self.pyqt5_entry_dep_vpp.text()),
+                             path_one=self.pyqt5_entry_main_results_path.text(),
+                             amplitude_two=float(self.pyqt5_entry_dep_vpp_replace.text()),
+                             path_two=self.pyqt5_entry_replace_results_path.text()
+                             )
+
     def closeEvent(self, event):
         cv2.destroyAllWindows()
         event.accept()
+
+

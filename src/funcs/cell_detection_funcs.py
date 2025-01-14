@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+
 from scipy.optimize import curve_fit
 
 # First, we need to detect the cell of intrest which will remain the same thorugh all the rest of the OpenDEP ot-force
@@ -93,7 +94,7 @@ def draw_parameters_to_image(image, radius, cell_to_target_distance, cell_to_ori
     return image
 
 
-def draw_dep_parameters_to_image(image, frequency, radius, cell_to_target_distance, displacement, ef_gradient, relative_dep,):
+def draw_dep_parameters_to_image(image, frequency, radius, cell_to_target_distance, displacement, ef_gradient):
     font = cv2.FONT_HERSHEY_SIMPLEX
     color = (255, 255, 255)
     thickness = 2
@@ -105,7 +106,6 @@ def draw_dep_parameters_to_image(image, frequency, radius, cell_to_target_distan
     cv2.putText(image, f"Displacement: {displacement:.2f} micrometers", (10, 120), font, 0.75, color,
                 thickness)
     cv2.putText(image, f"EF gradient: {ef_gradient:.2f} V^3/m^2", (10, 150), font, 0.75, color, thickness)
-    cv2.putText(image, f"Relative DEP force: {relative_dep:.2f}", (10, 180), font, 0.75, color, thickness)
 
     return image
 
@@ -256,11 +256,44 @@ def EF_conversion_function(distance_from_target):
     electric_field = -0.05 * distance_from_target ** 3 + 6.6909 * distance_from_target ** 2 - 310.27 * distance_from_target + 9302.7
     return electric_field
 
+def EF_conversion_function_triangular(distance_from_target, distance_from_surface):
+    # Coefficients for the rational function model
+    a = 118.785265
+    b = 129.315582
+    c = 3071.854373
+    d = 0.043775
+    e = 0.042860
+    f = -0.015306
 
-def calculate_EF_gradient(cell_start_to_target, cell_end_to_target, voltage=0.5):
+    # Calculate the electric field (EF) with the rational function model
+    electric_field = (a * distance_from_target + b * distance_from_surface + c) / (d * distance_from_target + e * distance_from_surface + f)
+    return electric_field
+
+def EF_conversion_function_OpeDEP(distance_from_target, distance_from_surface):
+    # Coefficients for the rational function model
+    a = 14692.919236
+    b = -2448.262234
+    c = 424442.892119
+    d = 7.678696
+    e = 3.951695
+    f = 24.615336
+
+    # Calculate the electric field (EF) with the rational function model
+    electric_field = (a * distance_from_target + b * distance_from_surface + c) / (d * distance_from_target + e * distance_from_surface + f)
+    return electric_field
+
+def calculate_EF_gradient(cell_start_to_target, cell_end_to_target, ef_model=0, cell_center_to_surface=10, voltage=0.5):
     # Calculate the electric field (EF) at the start and end of the cell
-    EF_start = EF_conversion_function(cell_start_to_target) * voltage
-    EF_end = EF_conversion_function(cell_end_to_target) * voltage
+    match ef_model:
+        case 0:
+             # model
+            EF_start = EF_conversion_function_triangular(cell_start_to_target, cell_center_to_surface) * voltage
+            EF_end = EF_conversion_function_triangular(cell_end_to_target, cell_center_to_surface) * voltage
+
+        case 1:
+            # OpenDEP model
+            EF_start = EF_conversion_function_OpeDEP(cell_start_to_target, cell_center_to_surface) * voltage
+            EF_end = EF_conversion_function_OpeDEP(cell_end_to_target, cell_center_to_surface) * voltage
 
     # Calulate the gradient of the squared electric field
     squared_EF_start = EF_start ** 2
@@ -333,6 +366,9 @@ def compute_voltage_ramping_from_ui(folder_path,
                                     origin_coords_pixels=(0, 0),
                                     roi_size_microns=(50, 50),
                                     microns_per_pixel=0.1923,
+                                    ef_model=0,
+                                    distance_from_surface_source=0,
+                                    distance_from_surface_microns=10,
                                     voltage_incr=0.25,
                                     frames_per_voltage=4,
                                     frames_per_second=2,
@@ -383,6 +419,10 @@ def compute_voltage_ramping_from_ui(folder_path,
     for file in os.listdir(folder_path):
         if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
             continue
+        if file.startswith("_baseline"):
+            # print(f"Skipping baseline image: {file}")
+            continue
+
         # Load the iterated image
         image_path_iter = os.path.join(folder_path, file)
         image_iter = cv2.imread(image_path_iter, cv2.IMREAD_GRAYSCALE)
@@ -402,8 +442,13 @@ def compute_voltage_ramping_from_ui(folder_path,
 
     # Loop through the OpenDEP ot-force in the folder
     for file in os.listdir(folder_path):
+        if file.startswith("_baseline"):
+            # print(f"Skipping baseline image: {file}")
+            continue
+
         if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
             continue
+
         # Load the iterated image
         image_path_iter = os.path.join(folder_path, file)
         image_iter = cv2.imread(image_path_iter, cv2.IMREAD_GRAYSCALE)
@@ -435,9 +480,18 @@ def compute_voltage_ramping_from_ui(folder_path,
         voltage = start_voltage + (iter_no // frames_per_voltage) * voltage_incr
         iter_no += 1
 
+        # Set the distance from the surface to either a fixed value or the average internal radius depending on selection
+        if distance_from_surface_source == 0:
+            local_distance_from_surface_microns = distance_from_surface_microns
+        elif distance_from_surface_source == 1:
+            local_distance_from_surface_microns = radius * microns_per_pixel
+
         # Calculate the electric field (EF) gradient
         ef_gradient, ef_start, ef_end = calculate_EF_gradient(target_to_cell_start * microns_per_pixel,
-                                                              target_to_cell_end * microns_per_pixel, voltage)
+                                                              target_to_cell_end * microns_per_pixel,
+                                                              ef_model=ef_model,
+                                                              cell_center_to_surface=local_distance_from_surface_microns,
+                                                              voltage=voltage)
 
         # Display the ROI with the detected cell
         roi_image = draw_highlight_rectangle(image_iter, (x, y), (x + w, y + h), (255, 255, 255), transparency=0.1)
@@ -532,6 +586,9 @@ def compute_frequency_ramping_from_ui(folder_path,
                                     origin_coords_pixels=(0, 0),
                                     roi_size_microns=(50, 50),
                                     microns_per_pixel=0.1923,
+                                    ef_model=0,
+                                    distance_from_surface_source=0,
+                                    distance_from_surface_microns=10,
                                     voltage=0.5,
                                     ):
 
@@ -542,11 +599,12 @@ def compute_frequency_ramping_from_ui(folder_path,
     cell_to_target_list = []
     cell_to_origin_list = []
     offset_list = []
+    norm_offset_list = []
     radi_list = []
     frequencies_list = []
     relative_DEP_forces = []
 
-    # Create processed OpenDEP ot-force folder
+    # Create processed OpenDEP DEP spectra folder
     processed_folder = os.path.join(folder_path, "_processed")
     if not os.path.exists(processed_folder):
         os.makedirs(processed_folder)
@@ -574,7 +632,8 @@ def compute_frequency_ramping_from_ui(folder_path,
     for file in os.listdir(folder_path):
         if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
             continue
-        if file.startswith("_"):
+        if file.startswith("_baseline"):
+            # print(f"Skipping baseline image: {file}")
             continue
 
         # Load the iterated image
@@ -626,9 +685,18 @@ def compute_frequency_ramping_from_ui(folder_path,
         baseline_distance_to_target = np.sqrt((target_coords_pixels[0] - origin_coords_pixels[0]) ** 2 + (target_coords_pixels[1] - origin_coords_pixels[1]) ** 2)
         offset = baseline_distance_to_target - cell_to_target
 
+        # Set the distance from the surface to either a fixed value or the average internal radius depending on selection
+        if distance_from_surface_source == 0:
+            local_distance_from_surface_microns = distance_from_surface_microns
+        elif distance_from_surface_source == 1:
+            local_distance_from_surface_microns = radius * microns_per_pixel
+
         # Calculate the electric field (EF) gradient
         ef_gradient, ef_start, ef_end = calculate_EF_gradient(target_to_cell_start * microns_per_pixel,
-                                                              target_to_cell_end * microns_per_pixel, voltage)
+                                                              target_to_cell_end * microns_per_pixel,
+                                                              ef_model=ef_model,
+                                                              cell_center_to_surface=local_distance_from_surface_microns,
+                                                              voltage=voltage)
 
         # Append the calculated parameters to the lists
         efs_end_list.append(ef_end)
@@ -638,11 +706,6 @@ def compute_frequency_ramping_from_ui(folder_path,
         cell_to_origin_list.append(origin_to_cell * microns_per_pixel)
         offset_list.append(offset * microns_per_pixel)
         radi_list.append(radius * microns_per_pixel)
-
-        # Calculate relative DEP forces by correcting offset with the gradient (need to have the first image as reference)
-        relative_DEP_force = (offset * microns_per_pixel / ef_gradient) / (offset_list[0] / ef_gradients_list[0])
-        print(f"Relative DEP force: {relative_DEP_force}")
-        relative_DEP_forces.append(relative_DEP_force)
 
         # Image formating
         # Display the ROI with the detected cell
@@ -661,8 +724,7 @@ def compute_frequency_ramping_from_ui(folder_path,
                                                   radius=radius * microns_per_pixel,
                                                   cell_to_target_distance=cell_to_target * microns_per_pixel,
                                                   displacement=offset * microns_per_pixel,
-                                                  ef_gradient=ef_gradient,
-                                                  relative_dep=relative_DEP_force)
+                                                  ef_gradient=ef_gradient)
 
         # Save image as processed with a text added before suffix -processed
         processed_image_path = os.path.join(processed_folder, file.replace(".", "-processed."))
@@ -670,17 +732,36 @@ def compute_frequency_ramping_from_ui(folder_path,
 
         print(f"Image: {file}")
 
+    # Calculate the relative DEP forces
+    # Get max offset and max ef gradient
+    offset_list_abs = [abs(i) for i in offset_list]
+    max_offset_abs = max(offset_list_abs)
+
+    ef_gradients_list_abs = [abs(i) for i in ef_gradients_list]
+    max_ef_gradient_abs = max(ef_gradients_list_abs)
+
+    # Calculate the relative DEP forces
+    for i in range(len(ef_gradients_list)):
+        norm_ef = ef_gradients_list[i] / max_ef_gradient_abs
+        norm_offset = offset_list[i] / max_offset_abs
+        relative_DEP_force = norm_offset / norm_ef
+
+        relative_DEP_forces.append(relative_DEP_force)
+        norm_offset_list.append(norm_offset)
+
     # Rearange the lists to be in ascending order of frequency
     (frequencies_list,
      ef_gradients_list,
      cell_to_target_list,
      cell_to_origin_list,
-     offset_list) = zip(*sorted(zip(
+     offset_list,
+     norm_offset_list) = zip(*sorted(zip(
         frequencies_list,
         ef_gradients_list,
         cell_to_target_list,
         cell_to_origin_list,
-        offset_list)))
+        offset_list,
+        norm_offset_list)))
 
     # Calculate the average and stdev of radius of particle
     avg_particle_radius = np.mean(radi_list)
@@ -696,8 +777,93 @@ def compute_frequency_ramping_from_ui(folder_path,
         file.write(f"Average particle radius (µm), {avg_particle_radius}, {stdev_particle_radius}\n")
         file.write("\n\n")
 
-        file.write("Frequency (Hz), EF gradient (V^2/m^3), Offset (µm), Relateive DEP Force\n")
+        file.write("Frequency (Hz), EF gradient (V^2/m^3), Offset (µm), Normalized Offset, Relateive DEP Force\n")
         for i in range(len(frequencies_list)):
-            file.write(f"{frequencies_list[i]}, {ef_gradients_list[i]}, {offset_list[i]}, {relative_DEP_forces[i]}\n")
+            file.write(f"{frequencies_list[i]}, {ef_gradients_list[i]}, {offset_list[i]}, {norm_offset_list[i]}, {relative_DEP_forces[i]}\n")
 
     return frequencies_list, ef_gradients_list, cell_to_target_list, cell_to_origin_list, offset_list, relative_DEP_forces
+
+def combine_dep_spectras(amplitude_one, path_one, amplitude_two, path_two):
+    # Load the csv files without pandas
+    with open(path_one, "r") as file:
+        data_one = file.readlines()
+
+    with open(path_two, "r") as file:
+        data_two = file.readlines()
+
+    # Get the data from the csv files
+    frequencies_one = []
+    ef_gradients_one = []
+    cell_to_target_one = []
+
+    for i in range(4, len(data_one)):
+        line = data_one[i].split(",")
+        frequencies_one.append(int(line[0]))
+        ef_gradients_one.append(float(line[1]))
+        cell_to_target_one.append(float(line[2]))
+
+    frequencies_two = []
+    ef_gradients_two = []
+    cell_to_target_two = []
+
+    for i in range(4, len(data_two)):
+        line = data_two[i].split(",")
+        frequencies_two.append(int(line[0]))
+        ef_gradients_two.append(float(line[1]))
+        cell_to_target_two.append(float(line[2]))
+
+    # Get the average and stdev of radius of particle
+    avg_particle_radius = float(data_one[0].split(",")[1])
+    stdev_particle_radius = float(data_one[0].split(",")[2])
+
+    # adjust the values of the second data to the first one with the difference in amplitude
+    for i in range(len(cell_to_target_two)):
+        cell_to_target_two[i] = cell_to_target_two[i] * amplitude_one / amplitude_two
+
+    # replace the values of the first one to the second one where the frequency is the same
+    for i in range(len(frequencies_one)):
+        for j in range(len(frequencies_two)):
+            if frequencies_one[i] == frequencies_two[j]:
+                ef_gradients_one[i] = ef_gradients_two[j]
+                cell_to_target_one[i] = cell_to_target_two[j]
+
+    # max offset and max ef gradient
+    offset_list_abs = [abs(i) for i in cell_to_target_one]
+    max_offset_abs = max(offset_list_abs)
+
+    ef_gradients_list_abs = [abs(i) for i in ef_gradients_one]
+    max_ef_gradient_abs = max(ef_gradients_list_abs)
+
+    # Calculate the relative DEP forces
+    relative_DEP_forces = []
+    norm_offset_list = []
+
+    for i in range(len(ef_gradients_one)):
+        norm_ef = ef_gradients_one[i] / max_ef_gradient_abs
+        norm_offset = cell_to_target_one[i] / max_offset_abs
+        relative_DEP_force = norm_offset / norm_ef
+
+        relative_DEP_forces.append(relative_DEP_force)
+        norm_offset_list.append(norm_offset)
+
+    # Normalize the relative DEP forces
+    dep_list_abs = [abs(i) for i in relative_DEP_forces]
+    max_dep_abs = max(dep_list_abs)
+
+    for i in range(len(relative_DEP_forces)):
+        relative_DEP_forces[i] = relative_DEP_forces[i] / max_dep_abs
+
+    # Save the results to a csv file
+    results_file = os.path.join(os.path.dirname(path_one), "results_combined.csv")
+    if os.path.exists(results_file):
+        os.remove(results_file)
+
+    with open(results_file, "w") as file:
+        file.write(f"Average particle radius (µm), {avg_particle_radius}, {stdev_particle_radius}\n")
+        file.write("\n\n")
+
+        file.write("Frequency (Hz), EF gradient (V^2/m^3), Offset (µm), Normalized Offset, Relateive DEP Force\n")
+        for i in range(len(frequencies_one)):
+            file.write(f"{frequencies_one[i]}, {ef_gradients_one[i]}, {cell_to_target_one[i]}, {norm_offset_list[i]}, {relative_DEP_forces[i]}\n")
+
+    return frequencies_one, ef_gradients_one, cell_to_target_one, norm_offset_list, relative_DEP_forces
