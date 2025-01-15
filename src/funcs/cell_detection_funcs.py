@@ -258,11 +258,11 @@ def EF_conversion_function(distance_from_target):
 
 def EF_conversion_function_triangular(distance_from_target, distance_from_surface):
     # Coefficients for the rational function model
-    a = 118.785265
-    b = 129.315582
+    a = 129.315582
+    b = 118.785265
     c = 3071.854373
-    d = 0.043775
-    e = 0.042860
+    d = 0.042860
+    e = 0.043775
     f = -0.015306
 
     # Calculate the electric field (EF) with the rational function model
@@ -271,12 +271,12 @@ def EF_conversion_function_triangular(distance_from_target, distance_from_surfac
 
 def EF_conversion_function_OpeDEP(distance_from_target, distance_from_surface):
     # Coefficients for the rational function model
-    a = 14692.919236
-    b = -2448.262234
-    c = 424442.892119
-    d = 7.678696
-    e = 3.951695
-    f = 24.615336
+    a = -267.026883
+    b = 1602.545940
+    c = 46293.443817
+    d = 0.431008
+    e = 0.837508
+    f = 2.684747
 
     # Calculate the electric field (EF) with the rational function model
     electric_field = (a * distance_from_target + b * distance_from_surface + c) / (d * distance_from_target + e * distance_from_surface + f)

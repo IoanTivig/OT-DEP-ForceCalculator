@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 
 # Step 1: Load Data
 # Assuming the file "data_opendep.csv" is in the same directory as this script
-data = pd.read_csv("data_triangular.csv")
+data = pd.read_csv("data_opendep.csv")
 
 # Extract columns into arrays
 x = data['x'].values       # Array of x values
