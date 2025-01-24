@@ -596,6 +596,7 @@ def compute_frequency_ramping_from_ui(folder_path,
     efs_end_list = []
     efs_start_list = []
     ef_gradients_list = []
+    norm_ef_gradients_list = []
     cell_to_target_list = []
     cell_to_origin_list = []
     offset_list = []
@@ -742,12 +743,20 @@ def compute_frequency_ramping_from_ui(folder_path,
 
     # Calculate the relative DEP forces
     for i in range(len(ef_gradients_list)):
-        norm_ef = ef_gradients_list[i] / max_ef_gradient_abs
         norm_offset = offset_list[i] / max_offset_abs
-        relative_DEP_force = norm_offset / norm_ef
+        norm_ef = ef_gradients_list[i] / max_ef_gradient_abs
+        relative_DEP_force = offset_list[i] / ef_gradients_list[i]
 
         relative_DEP_forces.append(relative_DEP_force)
         norm_offset_list.append(norm_offset)
+        norm_ef_gradients_list.append(norm_ef)
+
+    # Normalize the relative DEP forces
+    dep_list_abs = [abs(i) for i in relative_DEP_forces]
+    max_dep_abs = max(dep_list_abs)
+
+    for i in range(len(relative_DEP_forces)):
+        relative_DEP_forces[i] = relative_DEP_forces[i] / max_dep_abs
 
     # Rearange the lists to be in ascending order of frequency
     (frequencies_list,
@@ -755,13 +764,15 @@ def compute_frequency_ramping_from_ui(folder_path,
      cell_to_target_list,
      cell_to_origin_list,
      offset_list,
-     norm_offset_list) = zip(*sorted(zip(
+     norm_offset_list,
+     norm_ef_gradients_list) = zip(*sorted(zip(
         frequencies_list,
         ef_gradients_list,
         cell_to_target_list,
         cell_to_origin_list,
         offset_list,
-        norm_offset_list)))
+        norm_offset_list,
+        norm_ef_gradients_list)))
 
     # Calculate the average and stdev of radius of particle
     avg_particle_radius = np.mean(radi_list)
@@ -777,9 +788,9 @@ def compute_frequency_ramping_from_ui(folder_path,
         file.write(f"Average particle radius (µm), {avg_particle_radius}, {stdev_particle_radius}\n")
         file.write("\n\n")
 
-        file.write("Frequency (Hz), EF gradient (V^2/m^3), Offset (µm), Normalized Offset, Relateive DEP Force\n")
+        file.write("Frequency (Hz), EF gradient (V^2/m^3), Normalized EF gradient, Offset (µm), Normalized Offset, Relateive DEP Force\n")
         for i in range(len(frequencies_list)):
-            file.write(f"{frequencies_list[i]}, {ef_gradients_list[i]}, {offset_list[i]}, {norm_offset_list[i]}, {relative_DEP_forces[i]}\n")
+            file.write(f"{frequencies_list[i]}, {ef_gradients_list[i]}, {norm_ef_gradients_list[i]}, {offset_list[i]}, {norm_offset_list[i]}, {relative_DEP_forces[i]}\n")
 
     return frequencies_list, ef_gradients_list, cell_to_target_list, cell_to_origin_list, offset_list, relative_DEP_forces
 
@@ -794,41 +805,41 @@ def combine_dep_spectras(amplitude_one, path_one, amplitude_two, path_two):
     # Get the data from the csv files
     frequencies_one = []
     ef_gradients_one = []
-    cell_to_target_one = []
+    offset_one = []
 
     for i in range(4, len(data_one)):
         line = data_one[i].split(",")
         frequencies_one.append(int(line[0]))
         ef_gradients_one.append(float(line[1]))
-        cell_to_target_one.append(float(line[2]))
+        offset_one.append(float(line[3]))
 
     frequencies_two = []
     ef_gradients_two = []
-    cell_to_target_two = []
+    offset_two = []
 
     for i in range(4, len(data_two)):
         line = data_two[i].split(",")
         frequencies_two.append(int(line[0]))
         ef_gradients_two.append(float(line[1]))
-        cell_to_target_two.append(float(line[2]))
+        offset_two.append(float(line[3]))
 
     # Get the average and stdev of radius of particle
     avg_particle_radius = float(data_one[0].split(",")[1])
     stdev_particle_radius = float(data_one[0].split(",")[2])
 
     # adjust the values of the second data to the first one with the difference in amplitude
-    for i in range(len(cell_to_target_two)):
-        cell_to_target_two[i] = cell_to_target_two[i] * amplitude_one / amplitude_two
+    for i in range(len(offset_two)):
+        offset_two[i] = offset_two[i] * amplitude_one / amplitude_two
 
     # replace the values of the first one to the second one where the frequency is the same
     for i in range(len(frequencies_one)):
         for j in range(len(frequencies_two)):
             if frequencies_one[i] == frequencies_two[j]:
                 ef_gradients_one[i] = ef_gradients_two[j]
-                cell_to_target_one[i] = cell_to_target_two[j]
+                offset_one[i] = offset_two[j]
 
     # max offset and max ef gradient
-    offset_list_abs = [abs(i) for i in cell_to_target_one]
+    offset_list_abs = [abs(i) for i in offset_one]
     max_offset_abs = max(offset_list_abs)
 
     ef_gradients_list_abs = [abs(i) for i in ef_gradients_one]
@@ -837,14 +848,16 @@ def combine_dep_spectras(amplitude_one, path_one, amplitude_two, path_two):
     # Calculate the relative DEP forces
     relative_DEP_forces = []
     norm_offset_list = []
+    norm_ef_gradients_list = []
 
     for i in range(len(ef_gradients_one)):
         norm_ef = ef_gradients_one[i] / max_ef_gradient_abs
-        norm_offset = cell_to_target_one[i] / max_offset_abs
-        relative_DEP_force = norm_offset / norm_ef
+        norm_offset = offset_one[i] / max_offset_abs
+        relative_DEP_force = offset_one[i] / ef_gradients_one[i]
 
         relative_DEP_forces.append(relative_DEP_force)
         norm_offset_list.append(norm_offset)
+        norm_ef_gradients_list.append(norm_ef)
 
     # Normalize the relative DEP forces
     dep_list_abs = [abs(i) for i in relative_DEP_forces]
@@ -862,8 +875,8 @@ def combine_dep_spectras(amplitude_one, path_one, amplitude_two, path_two):
         file.write(f"Average particle radius (µm), {avg_particle_radius}, {stdev_particle_radius}\n")
         file.write("\n\n")
 
-        file.write("Frequency (Hz), EF gradient (V^2/m^3), Offset (µm), Normalized Offset, Relateive DEP Force\n")
+        file.write("Frequency (Hz), EF gradient (V^2/m^3), Normalized EF gradient, Offset (µm), Normalized Offset, Relateive DEP Force\n")
         for i in range(len(frequencies_one)):
-            file.write(f"{frequencies_one[i]}, {ef_gradients_one[i]}, {cell_to_target_one[i]}, {norm_offset_list[i]}, {relative_DEP_forces[i]}\n")
+            file.write(f"{frequencies_one[i]}, {ef_gradients_one[i]}, {norm_ef_gradients_list[i]}, {offset_one[i]}, {norm_offset_list[i]}, {relative_DEP_forces[i]}\n")
 
-    return frequencies_one, ef_gradients_one, cell_to_target_one, norm_offset_list, relative_DEP_forces
+    return frequencies_one, ef_gradients_one, offset_one, norm_offset_list, relative_DEP_forces
