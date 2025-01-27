@@ -211,9 +211,7 @@ class MainUI(QMainWindow):
         )
 
     def combine_dep_results(self):
-        combine_dep_spectras(amplitude_one=float(self.pyqt5_entry_dep_vpp.text()),
-                             path_one=self.pyqt5_entry_main_results_path.text(),
-                             amplitude_two=float(self.pyqt5_entry_dep_vpp_replace.text()),
+        combine_dep_spectras(path_one=self.pyqt5_entry_main_results_path.text(),
                              path_two=self.pyqt5_entry_replace_results_path.text()
                              )
 

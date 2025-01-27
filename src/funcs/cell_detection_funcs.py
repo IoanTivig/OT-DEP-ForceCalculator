@@ -794,7 +794,7 @@ def compute_frequency_ramping_from_ui(folder_path,
 
     return frequencies_list, ef_gradients_list, cell_to_target_list, cell_to_origin_list, offset_list, relative_DEP_forces
 
-def combine_dep_spectras(amplitude_one, path_one, amplitude_two, path_two):
+def combine_dep_spectras(path_one, path_two):
     # Load the csv files without pandas
     with open(path_one, "r") as file:
         data_one = file.readlines()
@@ -826,10 +826,6 @@ def combine_dep_spectras(amplitude_one, path_one, amplitude_two, path_two):
     # Get the average and stdev of radius of particle
     avg_particle_radius = float(data_one[0].split(",")[1])
     stdev_particle_radius = float(data_one[0].split(",")[2])
-
-    # adjust the values of the second data to the first one with the difference in amplitude
-    for i in range(len(offset_two)):
-        offset_two[i] = offset_two[i] * amplitude_one / amplitude_two
 
     # replace the values of the first one to the second one where the frequency is the same
     for i in range(len(frequencies_one)):
