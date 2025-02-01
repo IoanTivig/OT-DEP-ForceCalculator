@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from scipy.optimize import curve_fit
+import src.funcs.flow_physics_funcs as flow_physics_funcs
 
 # First, we need to detect the cell of intrest which will remain the same thorugh all the rest of the OpenDEP ot-force
 # We will need to detect the cells and select the one that is of interest
@@ -90,6 +91,21 @@ def draw_parameters_to_image(image, radius, cell_to_target_distance, cell_to_ori
     cv2.putText(image, f"EF gradient: {ef_gradient:.2f} V^3/m^2", (10, 120), font, 0.75, color, thickness)
     cv2.putText(image, f"EF at the start of the cell: {ef_start:.2f} V/m", (10, 150), font, 0.75, color, thickness)
     cv2.putText(image, f"EF at the end of the cell: {ef_end:.2f} V/m", (10, 180), font, 0.75, color, thickness)
+
+    return image
+
+def draw_flow_stiffness_parameters_to_image(image, radius, cell_to_origin_distance, flow_rate, flow_velocity, drag_force, displacement):
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    color = (255, 255, 255)
+    thickness = 2
+
+    cv2.putText(image, f"Cell radius: {radius:.2f} um", (10, 30), font, 0.75, color, thickness)
+    cv2.putText(image, f"Distance from origin to cell: {cell_to_origin_distance:.2f} um", (10, 60), font, 0.75, color,
+                thickness)
+    cv2.putText(image, f"Flow rate: {flow_rate:.2f} uL/min", (10, 90), font, 0.75, color, thickness)
+    cv2.putText(image, f"Flow velocity: {flow_velocity:.10f} m/s", (10, 120), font, 0.75, color, thickness)
+    cv2.putText(image, f"Drag force: {drag_force:.10f} pN", (10, 150), font, 0.75, color, thickness)
+    cv2.putText(image, f"Displacement: {displacement:.2f} um", (10, 180), font, 0.75, color, thickness)
 
     return image
 
@@ -876,3 +892,224 @@ def combine_dep_spectras(path_one, path_two):
             file.write(f"{frequencies_one[i]}, {ef_gradients_one[i]}, {norm_ef_gradients_list[i]}, {offset_one[i]}, {norm_offset_list[i]}, {relative_DEP_forces[i]}\n")
 
     return frequencies_one, ef_gradients_one, offset_one, norm_offset_list, relative_DEP_forces
+
+
+# OT Stiffness calculation from buffer flow
+def compute_flow_ramping_from_ui(
+                                folder_path,
+                                distance_particles_microns=15,
+                                min_radius_microns=5,
+                                max_radius_microns=20,
+                                param1=60,
+                                param2=30,
+                                origin_coords_pixels=(0, 0),
+                                roi_size_microns=(50, 50),
+                                microns_per_pixel=0.1923,
+                                distance_from_surface_source=0,
+                                distance_from_surface_microns=10,
+                                channel_width_mm=8,
+                                channel_height_mm=3,
+                                particle_offset_microns=0,
+                                fluid_dynamic_viscosity=0.001,
+                                near_wall_correction=0,
+                                flow_rate_incr=10,
+                                flow_rate_start=10,
+                                min_threshold=0.1,
+                                max_threshold=1.25,
+                                ):
+
+    # Initialize the lists for cell parameters per image
+    flow_rate_list = []
+    flow_velocities_list = []
+    drag_forces_list = []
+    fitted_drag_forces_list = []
+    cell_to_origin_list = []
+    radi_list = []
+
+    # Create processed OpenDEP ot-force folder
+    processed_folder = os.path.join(folder_path, "_processed")
+    if not os.path.exists(processed_folder):
+        os.makedirs(processed_folder)
+
+    data_folder = os.path.join(folder_path, "_data")
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
+
+    # Convert parameters from microns to pixels
+    min_radius_pixels = int(min_radius_microns / microns_per_pixel)
+    max_radius_pixels = int(max_radius_microns / microns_per_pixel)
+    distance_particles_pixels = int(distance_particles_microns / microns_per_pixel)
+    roi_size_pixels = (int(roi_size_microns[0] / microns_per_pixel),
+                       int(roi_size_microns[1] / microns_per_pixel))
+
+    # Define the region of interest (ROI) for the cell tracking
+    x = origin_coords_pixels[0] - roi_size_pixels[0] // 2
+    y = origin_coords_pixels[1] - roi_size_pixels[1] // 2
+    w = roi_size_pixels[0]
+    h = roi_size_pixels[1]
+
+    iter_no = 0
+    # Get the average size of the cell from all the OpenDEP ot-force
+    internal_radi = []
+    for file in os.listdir(folder_path):
+        if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
+            continue
+        if file.startswith("_baseline"):
+            # print(f"Skipping baseline image: {file}")
+            continue
+
+        # Load the iterated image
+        image_path_iter = os.path.join(folder_path, file)
+        image_iter = cv2.imread(image_path_iter, cv2.IMREAD_GRAYSCALE)
+
+        # Get the coordinates and radius of the detected cell in the ROI
+        roi = (x, y, w, h)
+        cell_coords, radius, image_iter, success = detect_cells_in_roi(image_iter,
+                                                                       distance_particles_pixels,
+                                                                       min_radius_pixels,
+                                                                       max_radius_pixels,
+                                                                       roi)
+        if not success:
+            continue
+
+        internal_radi.append(radius)
+    avg_internal_radius = int(np.mean(internal_radi))
+
+    # Loop through the OpenDEP ot-force in the folder
+    for file in os.listdir(folder_path):
+        if file.startswith("_baseline"):
+            # print(f"Skipping baseline image: {file}")
+            continue
+
+        if not file.endswith(".tif") and not file.endswith(".png") and not file.endswith(".jpg"):
+            continue
+
+        # Load the iterated image
+        image_path_iter = os.path.join(folder_path, file)
+        image_iter = cv2.imread(image_path_iter, cv2.IMREAD_GRAYSCALE)
+
+        # Get the coordinates and radius of the detected cell in the ROI
+        roi = (x, y, w, h)
+        cell_coords, radius, image_iter, success = detect_cells_in_roi(image_iter,
+                                                                       distance_particles_pixels,
+                                                                       min_radius_pixels,
+                                                                       max_radius_pixels,
+                                                                       roi)
+        if not success:
+            continue
+
+        # Calculate the distance from the origin to the cell position and radius
+        origin_to_cell, cell_to_target, target_to_cell_end, target_to_cell_start = calculate_distances(cell_coords,
+                                                                                                       origin_coords_pixels,
+                                                                                                       origin_coords_pixels,
+                                                                                                       avg_internal_radius)
+        # If cell distance is shorter than set times the diameter of the cell, skip the image
+        if origin_to_cell < min_threshold * radius:
+            continue
+
+        # if cell distance is longer than set times the diameter of the cell, break the loop
+        if origin_to_cell > max_threshold * radius:
+            break
+
+
+        # Calculate the flow velocity for the current image
+        flow_rate = flow_rate_start + iter_no * flow_rate_incr
+        iter_no += 1
+
+
+        # Set the distance from the surface to either a fixed value or the average internal radius depending on selection
+        if distance_from_surface_source == 0:
+            local_distance_from_surface_microns = distance_from_surface_microns
+        elif distance_from_surface_source == 1:
+            local_distance_from_surface_microns = avg_internal_radius * microns_per_pixel
+
+
+        # Calculate the velocity of the fluid at the particle position
+        flow_velocity = flow_physics_funcs.calculate_velocity(
+            flow_rate_ul_min=flow_rate,
+            width_mm=channel_width_mm,
+            height_mm=channel_height_mm,
+            particle_height_um=local_distance_from_surface_microns,
+            particle_offset_x_um=particle_offset_microns,
+        )
+
+        # Apply near wall correction if selected
+        if near_wall_correction == 0:
+            apply_correction = False
+        else:
+            apply_correction = True
+
+        # Calculate the drag force on the particle
+        drag_force = flow_physics_funcs.calculate_drag_force(
+            velocity=flow_velocity,
+            particle_radius_um=avg_internal_radius * microns_per_pixel,
+            fluid_viscosity=fluid_dynamic_viscosity,
+            distance_to_wall_um=local_distance_from_surface_microns,
+            apply_correction=apply_correction
+        )
+
+        # Display the ROI with the detected cell
+        roi_image = draw_highlight_rectangle(image_iter, (x, y), (x + w, y + h), (255, 255, 255), transparency=0.1)
+        roi_image = draw_highlight_circle(roi_image, cell_coords, radius, (255, 255, 255), transparency=0.25)
+
+        # Draw the initial position of cell
+        roi_image = draw_highlight_circle(roi_image, origin_coords_pixels, 3, (255, 255, 255), transparency=0.25)
+
+        # Draw the parameters on the image
+        image_iter = draw_flow_stiffness_parameters_to_image(image=roi_image,
+                                                             radius=radius * microns_per_pixel,
+                                                             cell_to_origin_distance=origin_to_cell * microns_per_pixel,
+                                                             flow_rate=flow_rate,
+                                                             flow_velocity=flow_velocity,
+                                                             drag_force=drag_force,
+                                                             displacement=origin_to_cell * microns_per_pixel)
+
+        # Save image as processed with a text added before suffix -processed
+        processed_image_path = os.path.join(processed_folder, file.replace(".", "-processed."))
+        cv2.imwrite(processed_image_path, image_iter)
+
+        # Append the calculated parameters to the lists
+        flow_rate_list.append(flow_rate)
+        flow_velocities_list.append(flow_velocity)
+        drag_forces_list.append(drag_force)
+        cell_to_origin_list.append(origin_to_cell * microns_per_pixel)
+        radi_list.append(radius * microns_per_pixel)
+
+        print(f"Image: {file}")
+
+    # Fit offset vs DEP force to a linear function
+    def hookes_law(x, k):
+        return k * x
+
+    popt, pcov = curve_fit(hookes_law, cell_to_origin_list, drag_forces_list)
+    k = popt[0]
+    for i in cell_to_origin_list:
+        fitted_drag_forces_list.append(i * float(k))
+
+    r_square = calculate_rsquare(drag_forces_list, fitted_drag_forces_list)
+    print(f"Stiffness (k): {k} pN/μm, Rsquared: {r_square}")
+
+    # Plot the data
+    plot_stiffness(data_folder, cell_to_origin_list, drag_forces_list, fitted_drag_forces_list, k, r_square)
+
+    # Calculate the average and stdev of radius of particle
+    avg_particle_radius = np.mean(radi_list)
+    stdev_particle_radius = np.std(radi_list)
+
+    # Save the results to a csv file
+    results_file = os.path.join(data_folder, "results.csv")
+    if os.path.exists(results_file):
+        os.remove(results_file)
+
+    with open(results_file, "w") as file:
+
+        file.write(f"Average particle radius (µm), {avg_particle_radius}, {stdev_particle_radius}\n")
+        file.write(f"Stiffness (pN/µm), {k}\n")
+        file.write(f"Rsquared, {r_square}\n")
+        file.write("\n\n")
+
+        file.write("Flow Rate (µL/min), Velocity at particle (m/s), Drag force (pN), Displacement (µm)\n")
+        for i in range(len(flow_rate_list)):
+            file.write(f"{flow_rate_list[i]}, {flow_velocities_list[i]}, {drag_forces_list[i]}, {cell_to_origin_list[i]}\n")
+
+    return drag_forces_list, flow_rate_list, flow_velocities_list, cell_to_origin_list

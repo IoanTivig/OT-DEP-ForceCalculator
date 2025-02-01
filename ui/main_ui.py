@@ -55,6 +55,7 @@ class MainUI(QMainWindow):
         self.pyqt5_button_compute_stiffness.clicked.connect(self.process_folder_stiffness)
         self.pyqt5_button_compute_spectra.clicked.connect(self.process_folder_frequency)
         self.pyqt5_button_combine_spectras.clicked.connect(self.combine_dep_results)
+        self.pyqt5_button_compute_flowbased_stiffness.clicked.connect(self.process_folder_stiffness_flow_based)
 
     def open_path(self):
         folder_path = QFileDialog.getExistingDirectory(self, "Select Folder")
@@ -193,6 +194,30 @@ class MainUI(QMainWindow):
             max_threshold=float(self.pyqt5_entry_max_threshold.text()),
             cm_factor=float(self.pyqt5_entry_cm_factor.text()),
             buffer_permittivity=float(self.pyqt5_entry_buffer_perm.text()),
+        )
+
+    def process_folder_stiffness_flow_based(self):
+        compute_flow_ramping_from_ui(
+            folder_path=self.pyqt5_entry_folderpath.text(),
+            distance_particles_microns=float(self.pyqt5_entry_mindistparticles.text()),
+            min_radius_microns=float(self.pyqt5_entry_particlesize_min.text()),
+            max_radius_microns=float(self.pyqt5_entry_particlesize_max.text()),
+            param1=int(self.pyqt5_entry_param1.text()),
+            param2=int(self.pyqt5_entry_param2.text()),
+            origin_coords_pixels=self.origin_coordinates,
+            roi_size_microns=(int(self.pyqt5_entry_roisize_w.text()), int(self.pyqt5_entry_roisize_h.text())),
+            microns_per_pixel=float(self.pyqt5_entry_micronspixelration.text()),
+            distance_from_surface_source=self.pyqt5_combo_flow_distfromsurfacesource.currentIndex(),
+            distance_from_surface_microns=float(self.pyqt5_entry_flow_distfromsurface.text()),
+            channel_width_mm=float(self.pyqt5_entry_flow_channel_width.text()),
+            channel_height_mm=float(self.pyqt5_entry_flow_channel_height.text()),
+            particle_offset_microns=float(self.pyqt5_entry_flow_particle_centeroffset.text()),
+            fluid_dynamic_viscosity=float(self.pyqt5_entry_flow_liquid_viscosity.text()),
+            near_wall_correction=self.pyqt5_combo_flow_stiffness_correction.currentIndex(),
+            flow_rate_incr=float(self.pyqt5_entry_flow_ramping_rate_incr.text()),
+            flow_rate_start=float(self.pyqt5_entry_flow_ramping_rate_start.text()),
+            min_threshold=float(self.pyqt5_entry_flow_ramping_min_thershold.text()),
+            max_threshold=float(self.pyqt5_entry_flow_ramping_max_thershold.text()),
         )
 
     def process_folder_frequency(self):
