@@ -1053,9 +1053,9 @@ def compute_flow_ramping_from_ui(
 
         # Calculate the drag force on the particle
         drag_force = flow_physics_funcs.calculate_drag_force(
-            velocity=flow_velocity,
+            velocity_ms=flow_velocity,
             particle_radius_um=avg_internal_radius * microns_per_pixel,
-            fluid_viscosity=fluid_dynamic_viscosity,
+            fluid_viscosity_Pas=fluid_dynamic_viscosity,
             distance_to_wall_um=local_distance_from_surface_microns,
             apply_correction=apply_correction
         )
