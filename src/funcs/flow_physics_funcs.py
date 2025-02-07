@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 
 def calculate_velocity(flow_rate_ul_min, width_mm, height_mm, particle_height_um, particle_offset_x_um):
@@ -41,7 +43,7 @@ def calculate_velocity(flow_rate_ul_min, width_mm, height_mm, particle_height_um
     return v_particle
 
 
-def calculate_drag_force(velocity, particle_radius_um, fluid_viscosity, distance_to_wall_um, apply_correction=True):
+def calculate_drag_force_old(velocity, particle_radius_um, fluid_viscosity, distance_to_wall_um, apply_correction=True):
     """
     Calculate the drag force exerted on a particle in a laminar flow, with optional near-wall effects.
 
@@ -83,12 +85,57 @@ def calculate_drag_force(velocity, particle_radius_um, fluid_viscosity, distance
     return drag_force_pN
 
 
+def calculate_drag_force(velocity, particle_radius_um, fluid_viscosity, distance_to_wall_um, apply_correction=True):
+    """
+    Calculate the drag force exerted on a particle in a laminar flow, with optional near-wall effects.
+
+    Parameters:
+    - velocity: Flow velocity at the particle's location (m/s)
+    - particle_radius_um: Radius of the particle in µm
+    - fluid_viscosity: Dynamic viscosity of the fluid (Pa·s)
+    - distance_to_wall_um: Distance of the particle's center from the wall in µm
+    - apply_correction: Boolean flag to enable or disable near-wall correction
+
+    Returns:
+    - drag_force_pN: Drag force exerted on the particle in picoNewtons (pN)
+    """
+    # Convert particle radius and wall distance to meters
+    particle_radius_m = particle_radius_um * 1e-6
+    distance_to_wall_m = distance_to_wall_um * 1e-6
+
+    # Calculate classical Stokes drag force (in Newtons)
+    drag_force = 6 * np.pi * fluid_viscosity * particle_radius_m * velocity
+
+    if apply_correction:
+        # Calculate the gap between the particle surface and the wall.
+        # distance_to_wall_m is the distance from the particle's center to the wall,
+        # so the gap (epsilon) is given by:
+        epsilon = distance_to_wall_m - particle_radius_m
+
+        # If epsilon is zero or negative (particle in contact with the wall), assign a small positive gap.
+        if epsilon <= 0:
+            print("epsilon is zero or negative, assigning a small positive gap.")
+            epsilon = 1e-9  # Adjust as needed based on physical context
+
+        # Compute the correction factor phi(epsilon)
+        phi = 2 * math.log(particle_radius_m / epsilon) - 0.9588  # Classic 8/15 correction, 0.9588 is the constant
+        phi = 3.08
+
+        # Apply the correction by dividing the classical drag force by phi(epsilon)
+        drag_force = drag_force * phi
+
+    # Convert force from Newtons (N) to picoNewtons (pN) (1 N = 1e12 pN)
+    drag_force_pN = drag_force * 1e12
+
+    return drag_force_pN
+
+
 if __name__ == "__main__":
     # General Parameters
     particle_radius_um = 5  # µm
 
     # Parameters to Test the function with some example values
-    flow_rate_ul_min = 100  # µL/min
+    flow_rate_ul_min = 1500  # µL/min
     width_mm = 8  # mm
     height_mm = 3  # mm
     offset_um = 0  # µm

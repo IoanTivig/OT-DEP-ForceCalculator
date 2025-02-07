@@ -226,7 +226,7 @@ def detect_cell_of_interest(image, distance_particles_pixels, min_radius_pixels,
     return cell_population_details, image
 
 
-def detect_cells_in_roi(image, distance_particles_pixels, min_radius_pixels, max_radius_pixels, roi):
+def detect_cells_in_roi(image, distance_particles_pixels, min_radius_pixels, max_radius_pixels, roi, param1=60, param2=30):
     # Load the image in grayscale
     success = True
 
@@ -239,7 +239,7 @@ def detect_cells_in_roi(image, distance_particles_pixels, min_radius_pixels, max
 
     # Use HoughCircles to detect circles in the ROI
     circles = cv2.HoughCircles(blurred_roi, cv2.HOUGH_GRADIENT, dp=1.2, minDist=distance_particles_pixels,
-                               param1=60, param2=30, minRadius=min_radius_pixels, maxRadius=max_radius_pixels)
+                               param1=param1, param2=param2, minRadius=min_radius_pixels, maxRadius=max_radius_pixels)
 
     # Check if only one cell is detected
     if circles is None or len(circles[0]) != 1:
@@ -449,7 +449,9 @@ def compute_voltage_ramping_from_ui(folder_path,
                                                                        distance_particles_pixels,
                                                                        min_radius_pixels,
                                                                        max_radius_pixels,
-                                                                       roi)
+                                                                       roi,
+                                                                       param1,
+                                                                       param2)
         if not success:
             continue
 
@@ -475,7 +477,9 @@ def compute_voltage_ramping_from_ui(folder_path,
                                                                        distance_particles_pixels,
                                                                        min_radius_pixels,
                                                                        max_radius_pixels,
-                                                                       roi)
+                                                                       roi,
+                                                                       param1,
+                                                                       param2)
         if not success:
             continue
 
@@ -663,7 +667,9 @@ def compute_frequency_ramping_from_ui(folder_path,
                                                                        distance_particles_pixels,
                                                                        min_radius_pixels,
                                                                        max_radius_pixels,
-                                                                       roi)
+                                                                       roi,
+                                                                       param1,
+                                                                       param2)
         if not success:
             continue
 
@@ -684,7 +690,9 @@ def compute_frequency_ramping_from_ui(folder_path,
                                                                        distance_particles_pixels,
                                                                        min_radius_pixels,
                                                                        max_radius_pixels,
-                                                                       roi)
+                                                                       roi,
+                                                                       param1,
+                                                                       param2)
         if not success:
             continue
 
@@ -968,7 +976,9 @@ def compute_flow_ramping_from_ui(
                                                                        distance_particles_pixels,
                                                                        min_radius_pixels,
                                                                        max_radius_pixels,
-                                                                       roi)
+                                                                       roi,
+                                                                       param1,
+                                                                       param2)
         if not success:
             continue
 
@@ -994,7 +1004,9 @@ def compute_flow_ramping_from_ui(
                                                                        distance_particles_pixels,
                                                                        min_radius_pixels,
                                                                        max_radius_pixels,
-                                                                       roi)
+                                                                       roi,
+                                                                       param1,
+                                                                       param2)
         if not success:
             continue
 
